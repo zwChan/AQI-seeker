@@ -1,7 +1,7 @@
 # AQI-seeker
 I am trying to find a better day for running in the next several days.
 
-AQI-seeker is going to predict the AQI of Shanghai, China. The haze is so terrible that people have to adapt
+AQI-seeker is going to predict the AQI of cities, e.g. Shanghai, China. The haze is so terrible that people have to adapt
 my life plan to avoid outdoor in the haze day. At present, I don't found an available tool to
 predict the haze. It is why I create this project.
 
