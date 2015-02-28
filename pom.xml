@@ -8,7 +8,7 @@
   <artifactId>aqi</artifactId>
   <version>0.0.1-SNAPSHOT</version>
   <packaging>jar</packaging>
-  <name>"aqi seeker"</name>
+  <name>"AQI seeker"</name>
   
   <repositories>
     <repository>
@@ -77,5 +77,11 @@
       <artifactId>spark-core_2.10</artifactId>
       <version>1.1.0-cdh5.2.0</version>
     </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_2.10</artifactId>
+      <version>1.1.0</version>
+    </dependency>
+
   </dependencies>
 </project>

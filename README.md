@@ -23,14 +23,23 @@ predict the haze. It is why I create this project.
   - Precipitation
   - Others to find
 
-## Step
- 1. Get history weather data from U.S.embassy and http://gis.ncdc.noaa.gov/.
- 2. Pre-process the data and get the data item interesting
- 3. Compute the Pearson's correlation between AQI and different weather items
- 4. Train the model with the strong relation items, using Random Forest algorithm
- 5. Predict AQI
- 6. Train the model using different algorithm, and find the "best" algorithm.
+## Step of Plan (Tested on CentOS 6.x, Spark 1.1.0 standalone mode)
+ - Get history weather data from U.S.embassy and http://gis.ncdc.noaa.gov/. -- Done
+ - Pre-process the data and get the data item interesting -- Done
+ - Compute the Pearson's correlation between AQI and different weather items -- Doing
+ - Train the model with the strong relation items, using Random Forest algorithm
+ - Predict AQI
+ - Train the model using different algorithm, and find the "best" algorithm.
 
+## How to run
+ - Download the code from github;
+ - Run the pre_run.py at the root directory first to prepare the data;
+ - Upload the data in data/shanghai/*.txt|cvs to hdfs;
+ - Compile the project using maven, then package a jar file for spark;
+ - Run the jar on spark.
+
+## Dependency
+ - Spark
 
 ## Contributor
   Anyone interested in the project is welcome!
