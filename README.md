@@ -11,10 +11,10 @@ predict the haze. It is why I create this project.
   * Second use this model to predict AQI in the next several days.
   * At last, I will find the "best" algorithm according to the accuracy.
   Weather data will including the weather station with the distance from Shanghai:
-    - Less than 100 km
-    - Around 300km
-    - Around 600km
-    - Around 1000km
+     - Less than 100 km
+     - Around 300km
+     - Around 600km
+     - Around 1000km
 
   Weather data will items including:
   - Temperature

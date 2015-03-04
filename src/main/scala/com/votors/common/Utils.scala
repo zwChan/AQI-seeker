@@ -18,3 +18,7 @@ object Utils extends java.io.Serializable{
     def trace(level: TraceLevel, x: Any) = println(x)
   }
 }
+
+class InterObj extends java.io.Serializable {
+  var valueDouble: Double= 0
+}
