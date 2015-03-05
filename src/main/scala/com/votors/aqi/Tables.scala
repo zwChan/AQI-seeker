@@ -26,7 +26,7 @@ import com.votors.aqi.Aqi._
 /*
   Origin data for SQLSchema
  */
-case class OriginData(stationId: String, ts: String,
+case class OriginData(stationId: String, ts: Int,
                       windDir: Int, windSpd: Int,
                       cloudHigh: Int, visby: Int,
                       temp: Int, dewpt: Int,
@@ -43,17 +43,17 @@ case class OriginData(stationId: String, ts: String,
     OriginData(stationId,ts,windDirTemp,windSpdTemp,cloudHighTemp,visbyTemp,tempTemp,dewptTemp,remarks)
   }
   override def toString(): String = {
-    f"\n${stationId}, ${ts}, ${windDir}%.1f, ${windSpd}%.1f, ${cloudHigh}%.1f, ${visby}%.1f, ${temp}%.1f, ${dewpt}%.1f, ${remarks}"
+    f"\n${stationId}, ${ts2Str(ts)}, ${windDir}%.1f, ${windSpd}%.1f, ${cloudHigh}%.1f, ${visby}%.1f, ${temp}%.1f, ${dewpt}%.1f, ${remarks}"
   }
 }
 
-case class AqiData(cityName: String, ts: String, aqi: Int) extends java.io.Serializable {
+case class AqiData(cityName: String, ts: Int, aqi: Int) extends java.io.Serializable {
   def normalize() = {
     val aqiTemp = if (aqi == -999) INVALID_NUM else aqi
 
     AqiData(cityName,ts,aqiTemp)
   }
   override def toString(): String = {
-    f"\n${cityName}, ${ts}, ${aqi}%.1f"
+    f"\n${cityName}, ${ts2Str(ts)}, ${aqi}%.1f"
   }
 }
