@@ -15,8 +15,18 @@ import com.votors.common.Utils._
 import com.votors.common.Utils.Trace._
 import com.votors.aqi.Aqi._
 
-case class CrTable(x: String, y: String, cr: Double, flag: Int, xRdd: RDD[Double], yRdd: RDD[Double]) extends java.io.Serializable {
-  override def toString = f"${x} ${y} ${cr}%.2f ${flag}"
+/**
+ * A class to show the correlations between two fileds
+ *
+ * @param x String One of the field
+ * @param y String The other field
+ * @param cr correlation; [-1,1]
+ * @param flag is the correlation valid. 0: valid, othes NOT valid
+ * @param xRdd
+ * @param yRdd
+ */
+case class CrTable(offset: Int,x: String, y: String, cr: Double, flag: Int, xRdd: RDD[Double], yRdd: RDD[Double]) extends java.io.Serializable {
+  override def toString = f"${x} ${y} ${cr}%.2f ${flag} ${offset}"
 }
 
 /**
@@ -39,23 +49,10 @@ class Correlation(@transient sc: SparkContext, @transient sqlContext: SQLContext
     r(tsIndex).toString
   })
 
-  def corrs(mainField: String="aqi", someFiles: Seq[String]=Nil): Seq[CrTable] = {
-    val needCorrField = if (someFiles.length>0) someFiles else needCorrFieldDefault
+  def corrs(mainField: String="aqi", someFieles: Seq[String]=Nil, offset: Int = 0): Seq[CrTable] = {
+    val needCorrField = if (someFieles.length>0) someFieles else needCorrFieldDefault
     trace(INFO,"Current schemaRDD schema is: ")
     trace(INFO,schemaRdd.schemaString)
-
-    def timeFilter(t: String, start: Date, end: Date): Boolean = {
-      val d = str2Date(t)
-      d.getTime >= start.getTime && d.getTime < end.getTime
-    }
-
-    def timeOffset(offsetOnHour: Int): Date = {
-      val row = schemaRdd.take(1)(0)
-      val number = schemaRdd.count()
-      val start = str2Date(row(tsIndex).asInstanceOf[String])
-      trace(INFO, "The first time is: " + row(tsIndex))
-      new Date(start.getTime + 3600*1000*offsetOnHour)
-    }
 
     val mainIndex = schemaRdd.schema.fieldNames.indexOf(mainField)
     if (mainIndex == -1) {
@@ -63,65 +60,34 @@ class Correlation(@transient sc: SparkContext, @transient sqlContext: SQLContext
       return null
     }
     // Create main filed RDD
-    val interObjMain = new InterObject{}
-    val aqiRdd = schemaRdd.map(r => {
-      val item = r(mainIndex).toString.toDouble
-      item
-      //fixInvalid(item, INVALID_NUM,interObjMain,0,0)
-    })
+    val aqiRdd = schemaRdd.map(r => r(mainIndex).toString.toDouble)
 
-
-    val interObjOther = new InterObject()
     val corrTables = fieldNames.value.map(f => {
       val index = fieldNames.value.indexOf(f)
       assert(index != -1)
       val corrTable =
         if (needCorrField.contains(f)) {
-          val fieldRdd = schemaRdd.map(r => {
-              val item = r(index).toString.toDouble
-              //fixInvalid(item, INVALID_NUM, interObjOther, 0,0)
-              item
-          })
+          // create field rdd
+          val fieldRdd = schemaRdd.map(r =>r(index).toString.toDouble)
+          //evaluate the correlation
           val cr = Statistics.corr(aqiRdd, fieldRdd)
-          CrTable("aqi",f,cr,0,aqiRdd,fieldRdd)
+          CrTable(offset,mainField,f,cr,0,aqiRdd,fieldRdd)
         } else {
-          CrTable("aqi", f, 0,1,null,null)
+          CrTable(offset,mainField, f, 0,1,null,null)
         }
       corrTable
-    })
+    }).filter(r => r.x != r.y)
     corrTables
-  }
-  def corrsOfOffset(crTable: Seq[CrTable], offsetOnHour: Int=0): Seq[CrTable] = {
-    def timeFilter(t: Long, start: Long): Boolean = {
-      t >= start
-    }
-
-    val firstTime = {
-      val t = tsRdd.take(1)(0)
-      //val number = schemaRdd.count()
-      //val index = fields.indexOf("ts")
-      val start = str2Date(t)
-      trace(INFO, "The first time is: " + t)
-      start.getTime
-    }
-    val counter = tsRdd.count()
-    val counterLeft = tsRdd.filter(t => timeFilter(str2Date(t).getTime, firstTime+3600*1000*offsetOnHour)).count()
-
-    crTable.filter(_.flag == 0).map(crTbl => {
-      val mainRdd = crTbl.xRdd.zipWithIndex().filter(_._2 >= counterLeft).map(_._1).repartition(10)
-      val otherRdd = crTbl.yRdd.zipWithIndex().filter(_._2 >= counter - counterLeft).map(_._1).repartition(10)
-      val cr = Statistics.corr(mainRdd, otherRdd)
-      CrTable("aqi",crTbl.y+"-"+offsetOnHour,cr,0,null,null)
-    })
   }
 
   /**
    * Transform the SchemaRDD to VectorRDD, and evaluate the correlation
    */
-  def corrAll(someFiles: Seq[String]=Nil): Seq[CrTable] = {
-    val needCorrField = if (someFiles.length>0) someFiles else needCorrFieldDefault
+  def corrsAll(someFieles: Seq[String]=Nil, offset: Int = 0): Seq[CrTable] = {
+    val needCorrField = if (someFieles.length>0) someFieles else needCorrFieldDefault
     trace(INFO,"Current schemaRDD schema is: ")
     trace(INFO,schemaRdd.schemaString)
+
     val veterRdd = schemaRdd.map(r => {
       val subRow = needCorrField.map(f =>{
         val index = fieldNames.value.indexOf(f)
@@ -136,9 +102,12 @@ class Correlation(@transient sc: SparkContext, @transient sqlContext: SQLContext
     val crArray = cr.toArray
     val aqiIndex = needCorrField.indexOf("aqi")
     assert(aqiIndex != -1, f"The 'aqi' is not found in needCorrField")
-    val result = Range(0,cr.numCols).map(col => {
-      CrTable("aqi",needCorrField(col),crArray(aqiIndex*cr.numCols + col),0,null,null)
-    })
+    val result = Range(0,cr.numCols*cr.numCols).map(index => {
+      val row = index / cr.numCols
+      val col = index - row * cr.numCols
+      CrTable(offset,needCorrField(row),needCorrField(col),crArray(aqiIndex*cr.numCols + col),0,null,null)
+    }).filter(r => r.x != r.y)
     result
   }
+
 }

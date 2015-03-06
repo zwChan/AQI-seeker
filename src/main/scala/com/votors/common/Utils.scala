@@ -45,8 +45,10 @@ object Utils extends java.io.Serializable{
   //class TraceLevel extends Enumeration {}
   object Trace extends Enumeration {
     type TraceLevel = Value
-    val DEBUG,INFO,WARN,ERROR=Value
-    def trace(level: TraceLevel, x: Any) = println(x)
+    val DEBUG,INFO,WARN,ERROR,NEVER=Value
+    var currLevel = INFO
+    def trace(level: TraceLevel, x: Any) = if (level >= currLevel)println(x)
+
   }
 }
 /**

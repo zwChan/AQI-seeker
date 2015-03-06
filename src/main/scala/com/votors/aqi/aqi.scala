@@ -35,7 +35,8 @@ class Aqi(sc: SparkContext, sqlContext: SQLContext, DataFilesOrPath: String, aqi
 
   private def loader = new LoadData()
   private var originalRdd = loader.loadOrigina.cache()
-  private var aqiRdd = loader.loadAqi.cache()
+  private val originalRdd_bk = originalRdd  //Backup the original data RDD for shiftDataTime(offset)
+  private val aqiRdd = loader.loadAqi.cache()
   var originDataTableName = "origin"
   var aqiDataTableName    = "aqi"
   import sqlContext.createSchemaRDD
@@ -46,11 +47,11 @@ class Aqi(sc: SparkContext, sqlContext: SQLContext, DataFilesOrPath: String, aqi
       isTableCreated = true
       trace(DEBUG, "originalRdd table take 10 items: " + originalRdd.take(10).mkString(","))
       originalRdd.registerTempTable(originDataTableName)
-      originalRdd.printSchema()
+      trace(INFO,originalRdd.schemaString)
 
-      println("aqiRdd table take 10 items: " + aqiRdd.take(10).mkString(","))
+      trace(DEBUG,"aqiRdd table take 10 items: " + aqiRdd.take(10).mkString(","))
       aqiRdd.registerTempTable(aqiDataTableName)
-      aqiRdd.schema.fieldNames.foreach(println)
+      aqiRdd.schema.fieldNames.foreach(trace(INFO,_))
     }
   }
 
@@ -61,7 +62,7 @@ class Aqi(sc: SparkContext, sqlContext: SQLContext, DataFilesOrPath: String, aqi
    */
   def shiftDataTime(offsetHours: Int): Unit = if (offsetHours != 0) {
     trace(INFO,f"Shift the data timeStamp to and offset ${offsetHours} hour(s)")
-    originalRdd = originalRdd.map(r => {
+    originalRdd = originalRdd_bk.map(r => {
       OriginData(r.stationId,r.ts + 3600 * offsetHours,r.windDir,r.windSpd,r.cloudHigh,r.visby,r.temp,r.dewpt,r.remarks)
     })
     isTableCreated = false
@@ -108,26 +109,30 @@ class Aqi(sc: SparkContext, sqlContext: SQLContext, DataFilesOrPath: String, aqi
             i(DATA_POS_MARKS).split(";")(0)).normalize()
         else
           OriginData(Aqi.INVALID_STR,0,Aqi.INVALID_NUM,Aqi.INVALID_NUM,Aqi.INVALID_NUM,Aqi.INVALID_NUM,Aqi.INVALID_NUM,Aqi.INVALID_NUM,Aqi.INVALID_STR)
-        })
+        }).filter(_.ts != 0)
 
       // fix the invalid field value
-      val interObjWindDir = new InterObject{}
-      val interObjWindSpd = new InterObject{}
-      val interObjcloudHigh = new InterObject{}
-      val interObjvisby = new InterObject{}
-      val interObjtemp = new InterObject{}
-      val interObjdewpt = new InterObject{}
-      val dataRddNew = dataRdd.map(r => {
-        OriginData(r.stationId, r.ts,
-          fixInvalid(r.windDir,Aqi.INVALID_NUM,interObjWindDir,0,0).toInt,
-          fixInvalid(r.windSpd,Aqi.INVALID_NUM,interObjWindSpd,0,0).toInt,
-          fixInvalid(r.cloudHigh,Aqi.INVALID_NUM,interObjcloudHigh,0,0).toInt,
-          fixInvalid(r.visby,Aqi.INVALID_NUM,interObjvisby,0,0).toInt,
-          fixInvalid(r.temp,Aqi.INVALID_NUM,interObjtemp,0,0).toInt,
-          fixInvalid(r.dewpt,Aqi.INVALID_NUM,interObjdewpt,0,0).toInt,
-          r.remarks
-        )
-      })
+      val dataRddNew = dataRdd.groupBy(_.stationId).map(g =>{
+        val interObjWindDir = new InterObject()
+        val interObjWindSpd = new InterObject()
+        val interObjcloudHigh = new InterObject()
+        val interObjvisby = new InterObject()
+        val interObjtemp = new InterObject()
+        val interObjdewpt = new InterObject()
+        //XXX: need sort first?  maybe.
+        /** get the data from the same station, then short by time, and fix the invalid value using the mean of values before the invalid value*/
+        g._2.toSeq.sortBy(_.ts).map(r => {
+          OriginData(r.stationId, r.ts,
+            fixInvalid(r.windDir,Aqi.INVALID_NUM,interObjWindDir,0,0).toInt,
+            fixInvalid(r.windSpd,Aqi.INVALID_NUM,interObjWindSpd,0,0).toInt,
+            fixInvalid(r.cloudHigh,Aqi.INVALID_NUM,interObjcloudHigh,0,0).toInt,
+            fixInvalid(r.visby,Aqi.INVALID_NUM,interObjvisby,0,0).toInt,
+            fixInvalid(r.temp,Aqi.INVALID_NUM,interObjtemp,0,0).toInt,
+            fixInvalid(r.dewpt,Aqi.INVALID_NUM,interObjdewpt,0,0).toInt,
+            r.remarks
+          )
+        })
+      }).flatMap(x=>x)
       dataRddNew
     }
 
@@ -145,13 +150,45 @@ class Aqi(sc: SparkContext, sqlContext: SQLContext, DataFilesOrPath: String, aqi
           string2Int(i(7),Aqi.INVALID_NUM)).normalize()
       })
 
-      val interObjMain = new InterObject{}
+      val interObjMain = new InterObject()
       val aqiRddNew = aqiRdd.map(r => {
         AqiData(r.cityName,r.ts,fixInvalid(r.aqi, Aqi.INVALID_NUM,interObjMain,0,0).toInt)
       })
       aqiRddNew
     }
   }
+
+
+  def aqiCorrs(aqi: Aqi, sql: String, step: Int=1, depth: Int=0): Unit = {
+    val res = Range(-1*depth,depth,step).map(off => {
+      aqi.shiftDataTime(off)
+      val combindRdd = aqi.sql(sql, -1)
+      if (combindRdd.count() > 0) {
+        trace(DEBUG, "combindRdd: " + combindRdd.take(10).mkString("\n"))
+        val cr = new Correlation(sc, sqlContext, combindRdd)
+        val result = cr.corrs(offset = off)
+        result
+      } else {
+        trace(WARN,f"No data is found at sql=${sql}, offset=${off}")
+        Nil
+      }
+    }).flatMap(r => r)
+    showCorrsFields(res)
+  }
+  def showCorrsFields(crTables: Seq[CrTable], mainField: String="aqi", factor: Int=100): Unit = {
+    // get offset number
+    val buffTitle = "%table offset\t" + crTables.filter(r => r.x == mainField && r.flag == 0).map(_.y).distinct.mkString("\t")
+    println(buffTitle)
+    var buffValue = ""
+    crTables.filter(r => r.x == mainField && r.flag == 0).groupBy(_.offset).toSeq.sortBy(_._1)
+      .foreach(g => {
+      buffValue += g._1 + "\t"
+      buffValue += g._2.map(r => (r.cr * factor).toInt).toSeq.mkString("\t")
+      println(buffValue)
+      buffValue = ""
+    })
+  }
+
 
 }
 
@@ -174,12 +211,14 @@ object Aqi {
     aqi.originDataTableName ="origin"
     aqi.aqiDataTableName    ="aqi"
 
+    aqi.aqiCorrs(aqi,"select origin.ts,aqi,temp,dewpt,visby,windSpd,cloudHigh,windDir from origin, aqi where origin.ts=aqi.ts order by origin.ts")
+    return
     // shift the time of data.
     aqi.shiftDataTime(string2Int(args(2)))
-
     //got the data we interested in
     val combindRdd = aqi.sql("select origin.ts,aqi,temp,dewpt,visby,windSpd,cloudHigh,windDir from origin, aqi where origin.ts=aqi.ts order by origin.ts",-1)
-    println(combindRdd.take(100).mkString("\t"))
+    trace(DEBUG, "Show 10 item of the sql result item in the schemaRDD:")
+    trace(DEBUG, combindRdd.take(10).mkString("\n"))
 
     //evaluate the correlation
     val cr = new Correlation(sc,sqlContext,combindRdd)
@@ -187,6 +226,7 @@ object Aqi {
     println(result.mkString("\n"))
     println(result(2).xRdd.count())
     println(result(2))
+    aqi.showCorrsFields(result)
     //println(result(2).xRdd.collect().mkString("\t"))
     //println(result(2).yRdd.collect().mkString("\t"))
     //println(result(3).yRdd.collect().mkString("\t"))
@@ -200,8 +240,9 @@ object Aqi {
     println(result(2).xRdd.collect().mkString("\t"))
     println(result(2).yRdd.collect().mkString("\t"))
     */
-    val res = cr.corrAll("aqi"::"temp"::"dewpt"::"visby"::"cloudHigh"::"windSpd"::"windDir"::Nil)
+    val res = cr.corrsAll("aqi"::"temp"::"dewpt"::"visby"::"cloudHigh"::"windSpd"::"windDir"::Nil)
     println(res.mkString("\n"))
+    aqi.showCorrsFields(res)
 
     return
     trace(INFO,"select count(*) from origin limit 10")
