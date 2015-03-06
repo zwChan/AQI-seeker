@@ -158,7 +158,14 @@ class Aqi(sc: SparkContext, sqlContext: SQLContext, DataFilesOrPath: String, aqi
     }
   }
 
-
+  /**
+   * A wrap method that support to pick data using spark-sql, then evaluate the correlations with adding a time offset
+   * to the data's timestamp field. Finally, it show the result with the %table format on Zeppelin.
+   * @param aqi
+   * @param sql
+   * @param step the step the time offset
+   * @param depth the start and end for the Range of time offset
+   */
   def aqiCorrs(aqi: Aqi, sql: String, step: Int=1, depth: Int=0): Unit = {
     val res = Range(-1*depth,depth,step).map(off => {
       aqi.shiftDataTime(off)
@@ -175,6 +182,8 @@ class Aqi(sc: SparkContext, sqlContext: SQLContext, DataFilesOrPath: String, aqi
     }).flatMap(r => r)
     showCorrsFields(res)
   }
+
+  /**show the result with the %table format on Zeppelin.*/
   def showCorrsFields(crTables: Seq[CrTable], mainField: String="aqi", factor: Int=100): Unit = {
     // get offset number
     val buffTitle = "%table offset\t" + crTables.filter(r => r.x == mainField && r.flag == 0).map(_.y).distinct.mkString("\t")
@@ -213,6 +222,7 @@ object Aqi {
 
     aqi.aqiCorrs(aqi,"select origin.ts,aqi,temp,dewpt,visby,windSpd,cloudHigh,windDir from origin, aqi where origin.ts=aqi.ts order by origin.ts")
     return
+    /**
     // shift the time of data.
     aqi.shiftDataTime(string2Int(args(2)))
     //got the data we interested in
@@ -254,5 +264,6 @@ object Aqi {
     //System.out.println("unsorted: " + dataItems.take(10).mkString(", "))
     val endTime = new Date()
     System.out.println("### used time: "+(endTime.getTime()-startTime.getTime())+" ###")
+      */
   }
 }
