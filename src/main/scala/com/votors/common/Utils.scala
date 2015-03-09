@@ -32,14 +32,14 @@ object Utils extends java.io.Serializable{
   }
 
   def str2Date(s: String): java.util.Date = {
-    val format = new java.text.SimpleDateFormat("yyyyMMddhhmm")
+    val format = new java.text.SimpleDateFormat("yyyyMMddHHmm")
     format.parse(s)
   }
-  def str2Ts(s: String): Int = {
-    (str2Date(s).getTime / 1000).toInt
+  def str2Ts(s: String): Long = {
+    (str2Date(s).getTime / 1000)
   }
-  def ts2Str(ts: Int): String = {
-    val format = new java.text.SimpleDateFormat("yyyyMMddhhmm")
+  def ts2Str(ts: Long): String = {
+    val format = new java.text.SimpleDateFormat("yyyyMMddHHmm")
     format.format(new Date(ts*1000))
   }
   //class TraceLevel extends Enumeration {}

@@ -26,7 +26,7 @@ import com.votors.aqi.Aqi._
 /*
   Origin data for SQLSchema
  */
-case class OriginData(stationId: String, ts: Int,
+case class OriginData(stationId: String, ts: Long,
                       windDir: Int, windSpd: Int,
                       cloudHigh: Int, visby: Int,
                       temp: Int, dewpt: Int,
@@ -47,7 +47,7 @@ case class OriginData(stationId: String, ts: Int,
   }
 }
 
-case class AqiData(cityName: String, ts: Int, aqi: Int) extends java.io.Serializable {
+case class AqiData(cityName: String, ts: Long, aqi: Int) extends java.io.Serializable {
   def normalize() = {
     val aqiTemp = if (aqi == -999) INVALID_NUM else aqi
 
