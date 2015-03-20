@@ -45,6 +45,10 @@ case class OriginData(stationId: String, ts: Long,
   override def toString(): String = {
     f"\n${stationId}, ${ts2Str(ts)}, ${windDir}%.1f, ${windSpd}%.1f, ${cloudHigh}%.1f, ${visby}%.1f, ${temp}%.1f, ${dewpt}%.1f, ${remarks}"
   }
+
+  def toList(): List[Double] = {
+    temp.toDouble::dewpt.toDouble::windSpd.toDouble::windDir.toDouble::cloudHigh.toDouble::visby.toDouble::Nil
+  }
 }
 
 case class AqiData(cityName: String, ts: Long, aqi: Int) extends java.io.Serializable {
@@ -53,7 +57,11 @@ case class AqiData(cityName: String, ts: Long, aqi: Int) extends java.io.Seriali
 
     AqiData(cityName,ts,aqiTemp)
   }
-  override def toString(): String = {
+  override def toString: String = {
     f"\n${cityName}, ${ts2Str(ts)}, ${aqi}%.1f"
+  }
+
+  def toList: List[Double] = {
+    ts::aqi.toDouble::Nil
   }
 }

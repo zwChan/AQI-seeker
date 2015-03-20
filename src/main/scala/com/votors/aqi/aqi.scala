@@ -31,12 +31,11 @@ import org.apache.spark.sql.{SQLContext,SchemaRDD}
 /*
   The main class of AQI-Seeker.
  */
-class Aqi(sc: SparkContext, sqlContext: SQLContext, DataFilesOrPath: String, aqiFilesOrPath: String) extends java.io.Serializable {
-
+case class Aqi(sc: SparkContext, sqlContext: SQLContext, DataFilesOrPath: String, aqiFilesOrPath: String) extends java.io.Serializable {
   private def loader = new LoadData()
-  private var originalRdd = loader.loadOrigina.cache()
-  private val originalRdd_bk = originalRdd  //Backup the original data RDD for shiftDataTime(offset)
-  private val aqiRdd = loader.loadAqi.cache()
+  val originalRdd = loader.loadOrigina.cache()
+  private var originalRddTemp = originalRdd  //Backup the original data RDD for shiftDataTime(offset)
+  val aqiRdd = loader.loadAqi.cache()
   var originDataTableName = "origin"
   var aqiDataTableName    = "aqi"
   import sqlContext.createSchemaRDD
@@ -45,9 +44,9 @@ class Aqi(sc: SparkContext, sqlContext: SQLContext, DataFilesOrPath: String, aqi
   def createTable() {
     if (!isTableCreated) {
       isTableCreated = true
-      trace(DEBUG, "originalRdd table take 10 items: " + originalRdd.take(10).mkString(","))
-      originalRdd.registerTempTable(originDataTableName)
-      trace(INFO,originalRdd.schemaString)
+      trace(DEBUG, "originalRddTemp table take 10 items: " + originalRddTemp.take(10).mkString(","))
+      originalRddTemp.registerTempTable(originDataTableName)
+      trace(INFO,originalRddTemp.schemaString)
 
       trace(DEBUG,"aqiRdd table take 10 items: " + aqiRdd.take(10).mkString(","))
       aqiRdd.registerTempTable(aqiDataTableName)
@@ -62,7 +61,7 @@ class Aqi(sc: SparkContext, sqlContext: SQLContext, DataFilesOrPath: String, aqi
    */
   def shiftDataTime(offsetHours: Int): Unit = if (offsetHours != 0) {
     trace(INFO,f"Shift the data timeStamp to and offset ${offsetHours} hour(s)")
-    originalRdd = originalRdd_bk.map(r => {
+    originalRddTemp = originalRdd.map(r => {
       OriginData(r.stationId,r.ts + 3600 * offsetHours,r.windDir,r.windSpd,r.cloudHigh,r.visby,r.temp,r.dewpt,r.remarks)
     })
     isTableCreated = false
@@ -220,7 +219,10 @@ object Aqi {
     aqi.originDataTableName ="origin"
     aqi.aqiDataTableName    ="aqi"
 
-    aqi.aqiCorrs(aqi,"select origin.ts,aqi,temp,dewpt,visby,windSpd,cloudHigh,windDir from origin, aqi where origin.ts=aqi.ts order by origin.ts")
+    //aqi.aqiCorrs(aqi,"select origin.ts,aqi,temp,dewpt,visby,windSpd,cloudHigh,windDir from origin, aqi where origin.ts=aqi.ts order by origin.ts")
+
+    val train = new Train(aqi)
+
     return
     /**
     // shift the time of data.
