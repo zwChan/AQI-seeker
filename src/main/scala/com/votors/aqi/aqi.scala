@@ -23,7 +23,7 @@ import com.votors.common.InterObject
 import org.apache.spark.{SparkConf, SparkContext}
 import com.votors.common.Utils._
 import com.votors.common.Utils.Trace._
-import org.apache.spark.sql.{SQLContext,SchemaRDD}
+import org.apache.spark.sql.{SQLContext,DataFrame}
 
 //import org.apache.spark.sql.SQLContext
 
@@ -38,19 +38,19 @@ case class Aqi(sc: SparkContext, sqlContext: SQLContext, DataFilesOrPath: String
   val aqiRdd = loader.loadAqi.cache()
   var originDataTableName = "origin"
   var aqiDataTableName    = "aqi"
-  import sqlContext.createSchemaRDD
+  import sqlContext.implicits._
 
   private var isTableCreated = false
   def createTable() {
     if (!isTableCreated) {
       isTableCreated = true
       trace(DEBUG, "originalRddTemp table take 10 items: " + originalRddTemp.take(10).mkString(","))
-      originalRddTemp.registerTempTable(originDataTableName)
-      trace(INFO,originalRddTemp.schemaString)
+      originalRddTemp.toDF.registerTempTable(originDataTableName)
+      trace(INFO,originalRddTemp.toDF.schema.treeString)
 
       trace(DEBUG,"aqiRdd table take 10 items: " + aqiRdd.take(10).mkString(","))
-      aqiRdd.registerTempTable(aqiDataTableName)
-      aqiRdd.schema.fieldNames.foreach(trace(INFO,_))
+      aqiRdd.toDF.registerTempTable(aqiDataTableName)
+      aqiRdd.toDF.schema.fieldNames.foreach(trace(INFO,_))
     }
   }
 
@@ -162,11 +162,12 @@ case class Aqi(sc: SparkContext, sqlContext: SQLContext, DataFilesOrPath: String
    * to the data's timestamp field. Finally, it show the result with the %table format on Zeppelin.
    * @param aqi
    * @param sql
-   * @param step the step the time offset
-   * @param depth the start and end for the Range of time offset
+   * @param start the start of time offset
+   * @param end the end of time offset
+   * @param step the step between the start and end of time offset
    */
-  def aqiCorrs(aqi: Aqi, sql: String, step: Int=1, depth: Int=0): Unit = {
-    val res = Range(-1*depth,depth,step).map(off => {
+  def aqiCorrs(aqi: Aqi, sql: String, start: Int=0, end: Int=1, step: Int=1): Unit = {
+    val res = Range(start, end, step).map(off => {
       aqi.shiftDataTime(off)
       val combindRdd = aqi.sql(sql, -1)
       if (combindRdd.count() > 0) {
@@ -219,7 +220,7 @@ object Aqi {
     aqi.originDataTableName ="origin"
     aqi.aqiDataTableName    ="aqi"
 
-    //aqi.aqiCorrs(aqi,"select origin.ts,aqi,temp,dewpt,visby,windSpd,cloudHigh,windDir from origin, aqi where origin.ts=aqi.ts order by origin.ts")
+    aqi.aqiCorrs(aqi,"select origin.ts,aqi,temp,dewpt,visby,windSpd,cloudHigh,windDir from origin, aqi where origin.ts=aqi.ts order by origin.ts")
 
     val train = new Train(aqi)
 

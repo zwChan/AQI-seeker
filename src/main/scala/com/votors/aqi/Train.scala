@@ -34,6 +34,9 @@ class Train(@transient aqi: Aqi) extends java.io.Serializable{
     LabeledPoint(aqi, Vectors.dense(feature.toArray))
   })
 
+  trace(INFO,"the join result os aqi and original data:")
+  data.take(100).foreach(trace(INFO,_))
+
   // Split the data into training and test sets (30% held out for testing)
   val splits = data.randomSplit(Array(0.7, 0.3))
   val (trainingData, testData) = (splits(0), splits(1))

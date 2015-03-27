@@ -7,7 +7,7 @@ package com.votors.aqi
 import com.votors.common.{InterObject}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkContext}
-import org.apache.spark.sql.{SQLContext,SchemaRDD}
+import org.apache.spark.sql.{SQLContext,DataFrame}
 import org.apache.spark.mllib.linalg.{_}
 import org.apache.spark.mllib.stat.Statistics
 import java.util.Date
@@ -37,7 +37,7 @@ case class CrTable(offset: Int,x: String, y: String, cr: Double, flag: Int, xRdd
  * @param sqlContext
  * @param schemaRdd
  */
-class Correlation(@transient sc: SparkContext, @transient sqlContext: SQLContext, schemaRdd: SchemaRDD)  extends java.io.Serializable {
+class Correlation(@transient sc: SparkContext, @transient sqlContext: SQLContext, schemaRdd: DataFrame)  extends java.io.Serializable {
   // Create ts filed RDD
   val fields = schemaRdd.schema.fieldNames.toArray
   val fieldNames = sc.broadcast(fields)
@@ -52,7 +52,7 @@ class Correlation(@transient sc: SparkContext, @transient sqlContext: SQLContext
   def corrs(mainField: String="aqi", someFieles: Seq[String]=Nil, offset: Int = 0): Seq[CrTable] = {
     val needCorrField = if (someFieles.length>0) someFieles else needCorrFieldDefault
     trace(INFO,"Current schemaRDD schema is: ")
-    trace(INFO,schemaRdd.schemaString)
+    trace(INFO,schemaRdd.schema.treeString)
 
     val mainIndex = schemaRdd.schema.fieldNames.indexOf(mainField)
     if (mainIndex == -1) {
@@ -81,12 +81,12 @@ class Correlation(@transient sc: SparkContext, @transient sqlContext: SQLContext
   }
 
   /**
-   * Transform the SchemaRDD to VectorRDD, and evaluate the correlation
+   * Transform the DataFrame to VectorRDD, and evaluate the correlation
    */
   def corrsAll(someFieles: Seq[String]=Nil, offset: Int = 0): Seq[CrTable] = {
     val needCorrField = if (someFieles.length>0) someFieles else needCorrFieldDefault
     trace(INFO,"Current schemaRDD schema is: ")
-    trace(INFO,schemaRdd.schemaString)
+    trace(INFO,schemaRdd.schema.treeString)
 
     val veterRdd = schemaRdd.map(r => {
       val subRow = needCorrField.map(f =>{

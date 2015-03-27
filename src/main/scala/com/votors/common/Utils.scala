@@ -4,7 +4,6 @@ import java.util.Date
 
 
 /**
- * Some utilities may be useful
  * Created by chenzhiwei on 2/28/2015.
  */
 object Utils extends java.io.Serializable{
