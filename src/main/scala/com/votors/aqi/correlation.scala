@@ -35,16 +35,16 @@ case class CrTable(offset: Int,x: String, y: String, cr: Double, flag: Int, xRdd
  *
  * @param sc the sparkContext
  * @param sqlContext
- * @param schemaRdd
+ * @param schemaDf
  */
-class Correlation(@transient sc: SparkContext, @transient sqlContext: SQLContext, schemaRdd: DataFrame)  extends java.io.Serializable {
+class Correlation(@transient sc: SparkContext, @transient sqlContext: SQLContext, schemaDf: DataFrame)  extends java.io.Serializable {
   // Create ts filed RDD
-  val fields = schemaRdd.schema.fieldNames.toArray
+  val fields = schemaDf.schema.fieldNames.toArray
   val fieldNames = sc.broadcast(fields)
-  val tsIndex = fieldNames.value.indexOf("ts")
   val needCorrFieldDefault = "aqi"::"temp"::"dewpt"::"visby"::"cloudHigh"::"windSpd"::"windDir"::Nil
+  val schemaRddTemp = schemaDf.rdd  // We cannot use the DataFrame to map.
 
-  val tsRdd = schemaRdd.map(r => {
+  val tsRdd = schemaRddTemp.map(r => {
     val tsIndex = fieldNames.value.indexOf("ts")
     r(tsIndex).toString
   })
@@ -52,15 +52,21 @@ class Correlation(@transient sc: SparkContext, @transient sqlContext: SQLContext
   def corrs(mainField: String="aqi", someFieles: Seq[String]=Nil, offset: Int = 0): Seq[CrTable] = {
     val needCorrField = if (someFieles.length>0) someFieles else needCorrFieldDefault
     trace(INFO,"Current schemaRDD schema is: ")
-    trace(INFO,schemaRdd.schema.treeString)
+    trace(INFO,schemaDf.schema.treeString)
 
-    val mainIndex = schemaRdd.schema.fieldNames.indexOf(mainField)
+    val mainIndex = schemaDf.schema.fieldNames.indexOf(mainField)
     if (mainIndex == -1) {
       trace(ERROR, "mainFile not found")
       return null
     }
     // Create main filed RDD
-    val aqiRdd = schemaRdd.map(r => r(mainIndex).toString.toDouble)
+
+    val aqiRdd = schemaRddTemp.map(r => r(0).toString.toDouble)
+    val fieldRdd = schemaRddTemp.map(r =>r(1).toString.toDouble)
+    //evaluate the correlation
+    trace(INFO,s"call Statistics.corr: X count: :${aqiRdd.count}, Y count:${fieldRdd.count}")
+    val cr = Statistics.corr(aqiRdd, fieldRdd)
+    trace(INFO,s"call Statistics.corr: result: ${cr}")
 
     val corrTables = fieldNames.value.map(f => {
       val index = fieldNames.value.indexOf(f)
@@ -68,9 +74,11 @@ class Correlation(@transient sc: SparkContext, @transient sqlContext: SQLContext
       val corrTable =
         if (needCorrField.contains(f)) {
           // create field rdd
-          val fieldRdd = schemaRdd.map(r =>r(index).toString.toDouble)
+          val fieldRdd = schemaRddTemp.map(r =>r(index).toString.toDouble)
           //evaluate the correlation
+          trace(INFO,s"call Statistics.corr: X count: :${aqiRdd.count}, Y count:${fieldRdd.count}")
           val cr = Statistics.corr(aqiRdd, fieldRdd)
+          trace(INFO,s"call Statistics.corr: result: ${cr}")
           CrTable(offset,mainField,f,cr,0,aqiRdd,fieldRdd)
         } else {
           CrTable(offset,mainField, f, 0,1,null,null)
@@ -86,9 +94,9 @@ class Correlation(@transient sc: SparkContext, @transient sqlContext: SQLContext
   def corrsAll(someFieles: Seq[String]=Nil, offset: Int = 0): Seq[CrTable] = {
     val needCorrField = if (someFieles.length>0) someFieles else needCorrFieldDefault
     trace(INFO,"Current schemaRDD schema is: ")
-    trace(INFO,schemaRdd.schema.treeString)
+    trace(INFO,schemaDf.schema.treeString)
 
-    val veterRdd = schemaRdd.map(r => {
+    val veterRdd = schemaRddTemp.map(r => {
       val subRow = needCorrField.map(f =>{
         val index = fieldNames.value.indexOf(f)
         assert(index != -1, f"The ${f} is not found in ${fieldNames.value}")
